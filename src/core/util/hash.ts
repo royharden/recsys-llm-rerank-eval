@@ -1,0 +1,31 @@
+// Hash helpers shared by core, console, CLI and (vendored) the rerank function. Vendorable: imports only util/.
+import { canonicalJson } from './canonical-json.ts';
+import { sha256HexBytes, sha256HexString } from './sha256.ts';
+
+export const HEX64 = /^[0-9a-f]{64}$/;
+
+/** Hex SHA-256 of a string (UTF-8) or raw bytes. */
+export function sha256Hex(input: string | Uint8Array): string {
+  return typeof input === 'string' ? sha256HexString(input) : sha256HexBytes(input);
+}
+
+/** Hex SHA-256 of `parts.join('|')`, the key-composition convention of PLAN §4 (e.g. requestKey, userKey). */
+export function hashParts(parts: readonly (string | number)[]): string {
+  return sha256HexString(parts.join('|'));
+}
+
+/** Hex SHA-256 of the canonical JSON of a plain value. */
+export function hashCanonical(value: unknown): string {
+  return sha256HexString(canonicalJson(value));
+}
+
+/** First `n` hex characters (default 16 = 64 bits) of a hex digest. */
+export function truncHex(hex: string, n = 16): string {
+  if (n < 1 || n > hex.length) throw new Error(`truncHex: n=${n} out of range`);
+  return hex.slice(0, n);
+}
+
+/** Truncated hashParts, for short keys such as `userKey`. */
+export function shortKey(parts: readonly (string | number)[], n = 16): string {
+  return truncHex(hashParts(parts), n);
+}

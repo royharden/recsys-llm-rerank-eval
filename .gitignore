@@ -1,0 +1,8 @@
+# PLAN §8
+data/ml-100k/
+config/manifest.lock.json
+.env*
+!.env.example
+.recsys-session.json
+node_modules
+dist
