@@ -3,9 +3,7 @@
 // no model call). The target is never injected: this module has no access to it.
 import type { CandidateItem } from '../contracts/types.ts';
 import type { Item } from '../data/types.ts';
-import { historyIds, kEffOf, promptHistoryOf, type UserContext, type UserFlag } from '../split/context.ts';
-import { userKeyOf } from '../split/manifest.ts';
-import type { SplitResult } from '../split/temporal.ts';
+import { kEffOf, promptHistoryOf, type UserContext, type UserFlag } from '../split/context.ts';
 import { knnRanking, type KnnK } from './itemknn.ts';
 import type { TrainingData } from './train.ts';
 
@@ -63,28 +61,3 @@ export function buildUserContext(
   };
 }
 
-/** UserContexts for the given split users (e.g. split.devUserIds) under the manifest salt, in the given order. */
-export function contextsForUsers(
-  split: SplitResult,
-  userIds: readonly number[],
-  salt: string,
-  train: TrainingData,
-  itemById: ReadonlyMap<number, Item>,
-  params: ContextParams,
-): UserContext[] {
-  if (train.T !== split.T) throw new Error(`contextsForUsers: TrainingData T=${train.T} differs from split T=${split.T}`);
-  return userIds.map((u) => {
-    const us = split.users.get(u);
-    if (!us) throw new Error(`contextsForUsers: unknown user ${u}`);
-    return buildUserContext(train, itemById, { userKey: userKeyOf(salt, u), history: historyIds(us.history) }, params);
-  });
-}
-
-/** Pre-T history ids for the given split users keyed by userKey (input to tuning). */
-export function devUsersOf(split: SplitResult, userIds: readonly number[], salt: string): { userKey: string; history: number[] }[] {
-  return userIds.map((u) => {
-    const us = split.users.get(u);
-    if (!us) throw new Error(`devUsersOf: unknown user ${u}`);
-    return { userKey: userKeyOf(salt, u), history: historyIds(us.history) };
-  });
-}

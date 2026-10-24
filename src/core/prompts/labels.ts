@@ -1,0 +1,102 @@
+// Presentation-position labels (PLAN §4 [CX]) and title sanitising. Vendorable: imports nothing outside this set.
+//
+// C<pos> = the pos-th candidate SHOWN in this variant (1-based), H<pos> = the pos-th history item shown, Jev key
+// c_<pos> = the pos-th question. The label → itemId map stays server-side (or in the local mock client); item ids and
+// knnRank never appear in prompt text. The canonical fallback order is always knnRank ascending.
+
+export const MAX_TITLE_CHARS = 120;
+export const UNTITLED = '(untitled)';
+
+export function candidateLabel(pos: number): string {
+  return `C${pos}`;
+}
+
+export function historyLabel(pos: number): string {
+  return `H${pos}`;
+}
+
+export function jevKey(pos: number): string {
+  return `c_${pos}`;
+}
+
+/** Control characters (C0, DEL, C1), zero-width/bidi/line-separator format characters, BOM. */
+function isStripped(code: number): boolean {
+  return (
+    code <= 0x1f ||
+    (code >= 0x7f && code <= 0x9f) ||
+    (code >= 0x200b && code <= 0x200f) ||
+    (code >= 0x2028 && code <= 0x202e) ||
+    (code >= 0x2060 && code <= 0x206f) ||
+    code === 0xfeff
+  );
+}
+
+/**
+ * Prompt-safe title: control/format characters and the delimiter characters '<' '>' become spaces, whitespace runs
+ * collapse, ends are trimmed, and the result is cut to <= 120 UTF-16 units without splitting a surrogate pair.
+ * Idempotent. The renderer additionally JSON-quotes every title, so a title can never close its quotes or its block.
+ */
+export function sanitizeTitle(raw: string): string {
+  let s = '';
+  for (let i = 0; i < raw.length; i++) {
+    const code = raw.charCodeAt(i);
+    s += isStripped(code) || code === 0x3c || code === 0x3e ? ' ' : raw[i];
+  }
+  s = s.replace(/\s+/g, ' ').trim();
+  if (s.length > MAX_TITLE_CHARS) {
+    s = s.slice(0, MAX_TITLE_CHARS);
+    const last = s.charCodeAt(s.length - 1);
+    if (last >= 0xd800 && last <= 0xdbff) s = s.slice(0, -1);
+    s = s.trimEnd();
+  }
+  return s;
+}
+
+export interface LabeledCandidate {
+  label: string;
+  jevKey: string;
+  /** 1-based presentation position. */
+  pos: number;
+  itemId: number;
+  knnRank: number;
+}
+
+export interface LabeledHistory {
+  label: string;
+  pos: number;
+  itemId: number;
+}
+
+export interface LabelMap {
+  /** Presentation order. */
+  candidates: LabeledCandidate[];
+  history: LabeledHistory[];
+  byLabel: ReadonlyMap<string, LabeledCandidate>;
+  byJevKey: ReadonlyMap<string, LabeledCandidate>;
+}
+
+/** Labels from presentation order (array order of the payload). */
+export function labelMap(p: {
+  candidates: readonly { itemId: number; knnRank: number }[];
+  history: readonly { itemId: number }[];
+}): LabelMap {
+  const candidates = p.candidates.map((c, i) => ({
+    label: candidateLabel(i + 1),
+    jevKey: jevKey(i + 1),
+    pos: i + 1,
+    itemId: c.itemId,
+    knnRank: c.knnRank,
+  }));
+  const history = p.history.map((h, i) => ({ label: historyLabel(i + 1), pos: i + 1, itemId: h.itemId }));
+  return {
+    candidates,
+    history,
+    byLabel: new Map(candidates.map((c): [string, LabeledCandidate] => [c.label, c])),
+    byJevKey: new Map(candidates.map((c): [string, LabeledCandidate] => [c.jevKey, c])),
+  };
+}
+
+/** Canonical fallback: candidate item ids in knnRank order. */
+export function knnOrder(candidates: readonly { itemId: number; knnRank: number }[]): number[] {
+  return [...candidates].sort((a, b) => a.knnRank - b.knnRank).map((c) => c.itemId);
+}

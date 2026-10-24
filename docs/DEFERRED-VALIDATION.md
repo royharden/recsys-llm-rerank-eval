@@ -43,3 +43,29 @@ result from this code is trusted. Seeded in M1; each later milestone appends its
 | 24 | Dev tuning outcomes on real data (k, K, tuned-rerank weights) | Needs real data and a Scorer; never run | After row 8: `tuneOnDev({ train, itemById, devUsers: devUsersOf(split, split.devUserIds, salt), judge: judgeFromScorer(scorerFromSplit(split, split.devUserIds, salt)), fitsCap: () => true })`; record k trials, ceilings (hits20/hits30/n), K reason and the weight trials |
 | 25 | Bootstrap runtime at 10,000 resamples × n held-out | Never executed | Time `pairedBootstrap` on n = 470 random vectors (≈ 4.7 M draws); expect well under 1 s |
 | 26 | Cross-check of metric formulas against an independent implementation | Only hand-computed tests (unrun) | Compute HR@10 / NDCG@10 / MRR@K / coverage / novelty for one arm with a short independent script (e.g. a spreadsheet or a 20-line Node script over `results.jsonl` from M3) and compare to 1e-12 |
+
+## M3 — model arms, runner, reports and mock CLI
+
+All rows below remain **pending**. The implementation and test sources have only been parsed for syntax.
+The `contextsForUsers` / `devUsersOf` adapters now live in `src/core/split/contexts.ts`; target-bearing
+`SplitResult` and `Scorer` imports are forbidden from arms, prompts, providers and probes by ESLint.
+
+| # | Item | Why deferred | Exact command / steps |
+|---|---|---|---|
+| 27 | M3 contracts, prompts, guard and probe/ledger tests | Tests authored under Dirty Mode, never executed | `npm test -- tests/model` |
+| 28 | Runner, immutable resume, JSONL corruption, report pooling and prereg tests | Same | `npm test -- tests/runner tests/report tests/prereg` |
+| 29 | Complete static typing/lint after dependency installation | Syntax parse cannot resolve imports, types or ESLint rules | `npm run typecheck`; `npm run lint`; fix all errors including JSON import attributes and `noUnusedLocals` |
+| 30 | Default mock end-to-end journey | CLI/tsx, tuning and I/O never executed | `npm run eval` → inspect `results/results.md`, `results/results.jsonl`, `results/config.json`; confirm six base arms, all probe rows, MOCK stamp, conditional/tercile/head-share rows, failure excerpt, paired CIs and ledger totals; no live/network calls |
+| 31 | Dry run has no provider calls | Source inspection only; spy regression unrun | `npm run eval -- --dry-run`; `npm test -- tests/model/probes-ledger.test.ts`; the dry run uses v1 as a declared placeholder and does not select the primary model |
+| 32 | JSONL resume keeps frozen identity and salt | Filesystem behavior never executed | Run `npm run eval` twice; second pass must reuse the lock's salt and preserve results.jsonl bytes/count (completed rows skipped). `npm run eval -- --seed 39` against that same lock must refuse. `npm test -- tests/runner/jsonl-store.test.ts` checks identity mismatch and corrupt trailing record refusal |
+| 33 | Planted position bias / unbiased control | No measured mock output yet | `npm test -- tests/model/probes-ledger.test.ts`; then `npm run eval -- --preset planted-bias --output-dir results/planted` and compare its position-bias CI/flag with the unbiased output; do not substitute simulated values into a claim |
+| 34 | Guard permutations and exact chaos repair counts | All nine chaos modes are test sources only | `npm test -- tests/model/guard.test.ts`; confirm valid prose/fences, unknown/repeated/missing labels, empty/wrong/no reply and finite [0,1] Jev validation |
+| 35 | Prompt leakage and repeat/cache separation | Tests never executed | `npm test -- tests/model/contracts-prompts.test.ts`; target changes and added post-T rows must leave both prompt bodies byte-identical; duplicate-metadata mappings and repeat index must change cache keys |
+| 36 | Pooled novelty/head share and failure-list definition | Report never executed | `npm test -- tests/report/table.test.ts`; compare short-list recommendation-pair weighting with an independent calculation; verify failure list is kNN rank ≤10 and model rank >10/absent |
+| 37 | Prereg template activation | Template is intentionally undated/invalid; no live choices exist | Follow `config/prereg.schema.md` after approved live dev evaluation; run `npm test -- tests/prereg/schema.test.ts`; M4 must call `assertPreregistered` with persisted hashes and startedAt before held-out live calls |
+| 38 | TypeSafe request shape/model and provider billing | Network/API calls forbidden; local source follows the construction plan only | At activation, check current TypeSafe primary docs against `serializeJevRequest` and the Jev adapter; verify `jev-1.13.0`, probability response keys and reported usage; confirm provider prices/overhead; only then enable verified bounds as in row 15 |
+| 39 | Real-data mock evaluation on the locked split | Dataset unavailable and runtime forbidden | After row 8, `npm run eval -- --data-dir data/ml-100k --manifest-lock config/manifest.lock.json --output-dir results/ml100k-mock`; all output remains MOCK and cannot be a held-out live measurement |
+
+Local JSONL checkpoints are single-writer files. An interrupted partial JSON record is refused with its line number;
+restore a complete checkpoint before resuming. This is an explicit local mock adapter; a persisted/live error must
+never silently fall back to it. `config/manifest.lock.json` stays gitignored; no salt or raw user ids enter result exports.

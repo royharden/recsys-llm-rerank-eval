@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "promptVersion": "llm-list.v1",
+  "arm": "llm-list",
+  "temperature": 0,
+  "maxTokensBase": 16,
+  "maxTokensPerCandidate": 6,
+  "instructions": "Rank every candidate by how likely this user is to watch it next, given the whole viewing history (listed oldest first)."
+}

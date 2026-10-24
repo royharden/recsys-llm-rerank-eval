@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "datedAt": null,
+  "datasetHash": null,
+  "manifestHash": null,
+  "configHash": null,
+  "config": {
+    "schemaVersion": 1,
+    "seed": null,
+    "knnK": null,
+    "K": null,
+    "tunedWeights": null,
+    "llmListPromptVersion": null,
+    "jevPromptVersion": "jev-point.v1",
+    "primaryArm": null,
+    "bootstrapResamples": 10000,
+    "practicalMarginNdcg": 0.01,
+    "probeSampleSeed": null,
+    "probeSampleMax": 150,
+    "models": {
+      "llm-list": {
+        "provider": "anthropic",
+        "model": "claude-haiku-5-5"
+      },
+      "jev-point": {
+        "provider": "typesafe",
+        "model": "jev-1.13.0"
+      }
+    },
+    "mock": null
+  },
+  "probes": {
+    "llm-list": [
+      "hist_shuffle",
+      "cand_reversed",
+      "cand_shuffled",
+      "masked",
+      "repeat"
+    ],
+    "jev-point": [
+      "q_shuffle"
+    ]
+  }
+}
