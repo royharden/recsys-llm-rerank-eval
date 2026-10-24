@@ -31,3 +31,15 @@ result from this code is trusted. Seeded in M1; each later milestone appends its
 | 17 | Browser UX on both branches + Web Worker | M5 | `npm run dev`; walk the local-mock and persisted-mock journeys |
 | 18 | README numbers regenerated from outputs | M6 | Regenerate the table from `results/results.md`; never hand-edit numbers |
 | 19 | Entry points not yet present at M1: `scripts/eval.ts` (M3), `scripts/sync-function-vendor.ts` (M4), `src/app/main.tsx` (M5) | M1 | `npm run eval`, `npm run sync:vendor`, `npm run dev`/`build` fail until those milestones land; re-check after M5 |
+
+## M2 — baselines, metrics, statistics
+
+| # | Item | Why deferred | Exact command / steps |
+|---|---|---|---|
+| 20 | Unit tests: arms, tuning, metrics, stats | Vitest not installed; tests written, never executed | `npx vitest run tests/arms tests/metrics tests/stats` |
+| 21 | Type check of the M2 modules (strict, `noUnusedLocals`, `verbatimModuleSyntax`) | Only a syntax parse was possible | `npm run typecheck`; pay attention to `src/core/arms/*`, `src/core/metrics/ranking.ts`, `src/core/stats/*` and the tuple-typed `Map` constructions in `tests/helpers/toy.ts` / `tests/arms/tuning.test.ts` |
+| 22 | Lint: Scorer import restriction holds for `src/core/arms/**` | ESLint not installed | `npm run lint`; additionally `grep -rn "split/scorer" src/core/arms` must print nothing |
+| 23 | itemknn cost on real ML-100K (dense 1,682² Float32Array ≈ 11 MB, neighbour sort, per-user scoring) | Never executed; timing/memory unmeasured | Load ML-100K (row 8), `buildTrainingData(dataset.interactions, split.T, dataset.items)` under `node --max-old-space-size=512`, time it and one `tuneOnDev` pass over the dev users; record wall time and peak RSS. Expected: seconds, < 100 MB |
+| 24 | Dev tuning outcomes on real data (k, K, tuned-rerank weights) | Needs real data and a Scorer; never run | After row 8: `tuneOnDev({ train, itemById, devUsers: devUsersOf(split, split.devUserIds, salt), judge: judgeFromScorer(scorerFromSplit(split, split.devUserIds, salt)), fitsCap: () => true })`; record k trials, ceilings (hits20/hits30/n), K reason and the weight trials |
+| 25 | Bootstrap runtime at 10,000 resamples × n held-out | Never executed | Time `pairedBootstrap` on n = 470 random vectors (≈ 4.7 M draws); expect well under 1 s |
+| 26 | Cross-check of metric formulas against an independent implementation | Only hand-computed tests (unrun) | Compute HR@10 / NDCG@10 / MRR@K / coverage / novelty for one arm with a short independent script (e.g. a spreadsheet or a 20-line Node script over `results.jsonl` from M3) and compare to 1e-12 |
