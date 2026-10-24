@@ -1,24 +1,10 @@
 import { z } from 'zod';
 import { hashCanonical } from '../util/hash.ts';
 import { ARM_VARIANTS } from '../contracts/rerank-payload.ts';
+import { FrozenConfigSchema, type FrozenConfig } from '../contracts/frozen-config.ts';
+export { FrozenConfigSchema, type FrozenConfig } from '../contracts/frozen-config.ts';
 
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
-const quarter = z.number().min(0).max(1).refine((n) => Number.isInteger(n * 4), 'weight must be on the 0.25 grid');
-const weights = z.object({ knn: quarter, recency: quarter, genre: quarter }).strict()
-  .refine((w) => w.knn + w.recency + w.genre === 1, 'weights must sum to 1');
-export const FrozenConfigSchema = z.object({
-  schemaVersion: z.literal(1), seed: z.number().int(), knnK: z.union([z.literal(20), z.literal(50), z.literal(100), z.literal('all')]),
-  K: z.union([z.literal(20), z.literal(30)]), tunedWeights: weights,
-  llmListPromptVersion: z.enum(['llm-list.v1', 'llm-list.v2']), jevPromptVersion: z.literal('jev-point.v1'),
-  primaryArm: z.enum(['llm-list', 'jev-point']), bootstrapResamples: z.literal(10000), practicalMarginNdcg: z.literal(0.01),
-  probeSampleSeed: z.number().int(), probeSampleMax: z.literal(150),
-  models: z.object({ 'llm-list': z.object({ provider: z.string(), model: z.string() }).strict(),
-    'jev-point': z.object({ provider: z.string(), model: z.string() }).strict() }).strict(),
-  /** Mock behavior changes the experiment and must participate in configHash. Live uses null. */
-  mock: z.object({ preset: z.enum(['unbiased', 'planted-bias']), seed: z.number().int(),
-    forcedModesHash: hash }).strict().nullable(),
-}).strict();
-export type FrozenConfig = z.infer<typeof FrozenConfigSchema>;
 export function configHashOf(config: FrozenConfig): string { return hashCanonical(FrozenConfigSchema.parse(config)); }
 
 // Executable preregistration is separate from config/prereg.json's human-readable undated template.

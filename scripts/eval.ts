@@ -1,4 +1,4 @@
-// M3 explicit local MOCK path. M4 adds login/logout and console-approved persisted live runs.
+// Explicit local MOCK or an existing console-approved persisted run. This CLI cannot approve runs.
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createItemKnnArm } from '../src/core/arms/itemknn.ts';
@@ -12,7 +12,8 @@ import { PRICE_TABLE } from '../src/core/contracts/prices.ts';
 import { loadDataset } from '../src/core/data/movielens.ts';
 import { generateSynthetic, type FormatChaosMode } from '../src/core/data/synthetic.ts';
 import { createMemoryCache, createMemoryLedger } from '../src/core/ledger/memory.ts';
-import { loadOrFreezeManifest, readMovieLensBytes } from '../src/core/node/fs-data.ts';
+import { loadOrFreezeManifest, readMovieLensBytes, readManifestLock } from '../src/core/node/fs-data.ts';
+import { checkpointCliSession, cliPublicConfig, createCliSupabase, loginCli, logoutCli, restoreCliSession } from '../src/core/node/session.ts';
 import { openJsonlStore } from '../src/core/node/jsonl-store.ts';
 import { configHashOf, FrozenConfigSchema } from '../src/core/prereg/schema.ts';
 import { sampleProbeUsers } from '../src/core/probes/orderprobe.ts';
@@ -23,29 +24,93 @@ import { MOCK_STAMP, resultsMarkdown } from '../src/core/report/results-md.ts';
 import { runEvaluation } from '../src/core/runner/run.ts';
 import { userKeyOf } from '../src/core/split/manifest.ts';
 import { hashCanonical } from '../src/core/util/hash.ts';
+import { loadManifest } from '../src/core/split/manifest.ts';
+import { runPersistedEvaluation } from '../src/lib/evaluation.ts';
+import { loadPersistedRun } from '../src/lib/supabase-store.ts';
 
-interface Args { seed: number; preset: MockPreset; dataDir: string | null; outputDir: string; manifestLock: string | null; dry: boolean; runId: string | null }
+interface Args { seed: number; seedExplicit: boolean; preset: MockPreset; presetExplicit: boolean; dataDir: string | null;
+  outputDir: string; manifestLock: string | null; dry: boolean; runId: string | null; live: boolean; mock: boolean }
 function parseArgs(argv: string[]): Args {
-  const out: Args = { seed: 38, preset: 'unbiased', dataDir: null, outputDir: 'results', manifestLock: null, dry: false, runId: null };
+  const out: Args = { seed: 38, seedExplicit: false, preset: 'unbiased', presetExplicit: false, dataDir: null,
+    outputDir: 'results', manifestLock: null, dry: false, runId: null, live: false, mock: false };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--dry-run') { out.dry = true; continue; }
-    if (flag === '--mock') continue;
+    if (flag === '--mock') { out.mock = true; continue; }
+    if (flag === '--live') { out.live = true; continue; }
     const value = argv[++i];
     if (value === undefined) throw new Error(`${flag}: value required`);
-    if (flag === '--seed') { out.seed = Number(value); if (!Number.isInteger(out.seed)) throw new Error('seed must be an integer'); }
-    else if (flag === '--preset') { if (value !== 'unbiased' && value !== 'planted-bias') throw new Error('unknown mock preset'); out.preset = value; }
+    if (flag === '--seed') { out.seed = Number(value); out.seedExplicit = true; if (!Number.isInteger(out.seed)) throw new Error('seed must be an integer'); }
+    else if (flag === '--preset') { if (value !== 'unbiased' && value !== 'planted-bias') throw new Error('unknown mock preset'); out.preset = value; out.presetExplicit = true; }
     else if (flag === '--data-dir') out.dataDir = value;
     else if (flag === '--output-dir') out.outputDir = value;
     else if (flag === '--manifest-lock') out.manifestLock = value;
     else if (flag === '--run-id') out.runId = value;
-    else throw new Error(`unsupported option ${flag}; M3 implements --mock only`);
+    else throw new Error(`unsupported option ${flag}`);
   }
+  if (out.live && out.mock) throw new Error('Choose --mock or --live.');
+  if (out.live && !out.runId) throw new Error('--live requires --run-id of an existing console-approved run.');
   return out;
 }
 
 async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv[0] === 'logout') {
+    if (argv.length !== 1) throw new Error('Usage: npm run eval -- logout');
+    await logoutCli(); console.log('Local CLI session removed.'); return;
+  }
+  if (argv[0] === 'login') {
+    if (argv.length !== 1) throw new Error('Usage: npm run eval -- login');
+    await loginCli(createCliSupabase(cliPublicConfig())); console.log('Signed in; local session saved with restricted access.'); return;
+  }
+  const args = parseArgs(argv);
+  if (args.runId) { await persistedMain(args); return; }
+  await localMockMain(args);
+}
+
+async function persistedMain(args: Args): Promise<void> {
+  const publicConfig = cliPublicConfig();
+  const client = createCliSupabase(publicConfig);
+  await restoreCliSession(client);
+  try {
+    const run = await loadPersistedRun(client, args.runId!);
+    if (run.state === 'draft') throw new Error('Approve this run in the console before using --run-id.');
+    if ((args.live && run.mode !== 'live') || (args.mock && run.mode !== 'mock')) throw new Error('Requested mode differs from persisted run.');
+    const manifest = run.config.manifest;
+    if (args.seedExplicit && args.seed !== manifest.seed) throw new Error('--seed differs from the frozen run.');
+    if (args.presetExplicit && args.preset !== run.config.frozen.mock?.preset) throw new Error('--preset differs from the frozen run.');
+    // The run's manifest wins. A local lock is checked if present, never frozen/replaced on this path.
+    const lock = await readManifestLock(args.manifestLock ?? (args.dataDir ? 'config/manifest.lock.json' : 'fixtures/synthetic/manifest.lock.json'));
+    if (lock !== null) {
+      const checked = loadManifest(lock, { datasetHash: manifest.datasetHash });
+      if (!checked.ok) throw new Error(checked.error);
+      if (checked.manifest.salt !== manifest.salt || checked.manifest.manifestHash !== manifest.manifestHash)
+        throw new Error('Local manifest lock differs from the authoritative persisted run.');
+    }
+    const fixture = args.dataDir ? null : generateSynthetic(manifest.seed);
+    const files = fixture ? { uData: new TextEncoder().encode(fixture.uData), uItem: fixture.uItem } : await readMovieLensBytes(args.dataDir!);
+    const loaded = loadDataset(files);
+    if (!loaded.ok) throw new Error(loaded.error);
+    if (loaded.report.rejectCount > 0) throw new Error('Refusing rejected input lines.');
+    const forcedModes = new Map<string, FormatChaosMode>();
+    for (const trap of fixture?.traps ?? []) if (trap.kind === 'format-chaos') for (const a of trap.assignments)
+      forcedModes.set(userKeyOf(manifest.salt, a.userId), a.mode);
+    const output = await runPersistedEvaluation(client, publicConfig, run, loaded.dataset, { forcedModes, dryRun: args.dry });
+    if (args.dry) { console.log(JSON.stringify({ runId: run.id, mode: run.mode, expected: output.expected,
+      storedRows: output.rows.length, estimate: output.estimate }, null, 2)); return; }
+    if (!output.report) throw new Error('Missing computed report.');
+    await mkdir(args.outputDir, { recursive: true });
+    await writeFile(path.join(args.outputDir, 'results.md'), resultsMarkdown(output.report), 'utf8');
+    const records = [{ type: 'meta', value: output.identity }, ...output.calls.map((value) => ({ type: 'call', value })),
+      ...output.rows.map((value) => ({ type: 'result', value }))];
+    await writeFile(path.join(args.outputDir, 'results.jsonl'), `${records.map((record) => JSON.stringify(record)).join('\n')}\n`, 'utf8');
+    await writeFile(path.join(args.outputDir, 'config.json'), `${JSON.stringify({ identity: output.identity,
+      config: output.config, devDiffs: run.config.devDiffs }, null, 2)}\n`, 'utf8');
+    console.log(`${run.mode === 'mock' ? `${MOCK_STAMP}\n` : ''}${output.rows.length} persisted result rows → ${args.outputDir}/results.md + results.jsonl`);
+  } finally { await checkpointCliSession(client); }
+}
+
+async function localMockMain(args: Args): Promise<void> {
   const fixture = args.dataDir ? null : generateSynthetic(args.seed);
   const files = fixture ? { uData: new TextEncoder().encode(fixture.uData), uItem: fixture.uItem }
     : await readMovieLensBytes(args.dataDir!);

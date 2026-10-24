@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "promptVersion": "llm-list.v2",
+  "arm": "llm-list",
+  "temperature": 0,
+  "maxTokensBase": 16,
+  "maxTokensPerCandidate": 6,
+  "instructions": "Rank every candidate by how likely this user is to watch it next. The history is listed oldest first; weight the most recent items (the last lines) most heavily: sequels, franchises and genres the user has just been watching are the strongest signals."
+}

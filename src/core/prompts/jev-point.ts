@@ -82,9 +82,10 @@ export function jevPromptHash(r: RenderedJev): string {
 }
 
 /**
- * The full serialized TypeSafe request body (shape to be confirmed against docs.typesafe.ai in M4; deferred). The hard
- * bound is computed on exactly these bytes.
+ * The full serialized TypeSafe request body. Envelope follows the approved local 01-jev-integration-guide.md.
+ * The Noul type/instructions JSON shape remains provisional until live docs/API verification; boundVerified stays false.
+ * The hard bound is computed on exactly these bytes, shared by dry run and the live adapter.
  */
 export function serializeJevRequest(model: string, r: RenderedJev): string {
-  return JSON.stringify({ model, state: r.state, nouls: r.questions.map((q) => ({ key: q.key, text: q.text })) });
+  return JSON.stringify({ model, state: r.state, questions: Object.fromEntries(r.questions.map((q) => [q.key, { type: 'noul', instructions: q.text }])) });
 }

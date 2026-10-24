@@ -4,6 +4,10 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "paths": {
+      "npm:zod@3.23.8": ["./node_modules/zod"],
+      "npm:@supabase/supabase-js@2.49.4": ["./node_modules/@supabase/supabase-js"]
+    },
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "strict": true,

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "datedAt": "2026-10-24",
+  "currency": "USD",
+  "note": "PLACEHOLDERS, NOT REAL PRICES. Every price that is not confirmed from the provider's own pricing page is null; perRequestOverheadTokens values are construction assumptions. While a required price is null, live calls refuse with price_missing and the dry run shows 'unavailable'; while boundVerified is false, live calls refuse with bound_unverified (the mock provider is unaffected). Replace a null only with a value copied from a dated provider source, set priceVerified/boundVerified only after the checks in docs/DEFERRED-VALIDATION.md, and update datedAt.",
+  "entries": [
+    {
+      "provider": "anthropic",
+      "model": "claude-haiku-5-5",
+      "arm": "llm-list",
+      "billing": "tokens",
+      "inputUsdPerMTok": null,
+      "outputUsdPerMTok": null,
+      "perCallUsd": 0,
+      "perUnitUsd": 0,
+      "perRequestOverheadTokens": 64,
+      "priceVerified": false,
+      "boundVerified": false,
+      "source": null,
+      "note": "Model pin candidate (PLAN D1). Input/output prices unknown here: confirm from Anthropic's pricing page. perRequestOverheadTokens = 64 is an unverified placeholder for message framing; confirm with one dev live call (reported usage vs bound) before setting boundVerified."
+    },
+    {
+      "provider": "typesafe",
+      "model": "jev-1.13.0",
+      "arm": "jev-point",
+      "billing": "tokens+units",
+      "inputUsdPerMTok": null,
+      "outputUsdPerMTok": 0,
+      "perCallUsd": 0,
+      "perUnitUsd": 0,
+      "perRequestOverheadTokens": 32,
+      "priceVerified": false,
+      "boundVerified": false,
+      "source": null,
+      "note": "Billing model (per token vs per question) is unconfirmed: confirm from docs.typesafe.ai. outputUsdPerMTok = 0 and perCallUsd/perUnitUsd = 0 follow the plan's assumption that output is free and are unverified; inputUsdPerMTok is unknown (null). perRequestOverheadTokens = 32 (applied per question) is a placeholder."
+    },
+    {
+      "provider": "mock",
+      "model": "mock-1",
+      "arm": "any",
+      "billing": "tokens",
+      "inputUsdPerMTok": 0,
+      "outputUsdPerMTok": 0,
+      "perCallUsd": 0,
+      "perUnitUsd": 0,
+      "perRequestOverheadTokens": 0,
+      "priceVerified": true,
+      "boundVerified": true,
+      "source": "simulated provider in src/core/providers/mock.ts",
+      "note": "Simulated provider: every call costs 0 microdollars. Results produced with it are stamped 'MOCK: simulated, not a measurement'."
+    }
+  ]
+}
