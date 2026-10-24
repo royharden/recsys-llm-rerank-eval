@@ -18,5 +18,18 @@ export function createPublicSupabase(config: PublicSupabaseConfig | null,
 }
 // Node's import.meta has no env. Missing browser configuration is an explicit local-mock/setup state.
 const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
-export const supabaseConfig = publicSupabaseConfig(viteEnv);
-export const supabase = createPublicSupabase(supabaseConfig);
+function browserConfiguration() {
+  try { return { config: publicSupabaseConfig(viteEnv), error: null }; }
+  catch { return { config: null, error: 'Public database configuration is invalid. Check its URL and anon key, then reload.' }; }
+}
+const browser = browserConfiguration();
+export const supabaseConfig = browser.config;
+export const supabaseConfigError = browser.error;
+// Importing the console/CLI never starts auth refresh or URL-session processing.
+// The console activates this public client only after an explicit persisted-mode choice.
+export let supabase: SupabaseClient | null = null;
+export function activateBrowserSupabase(): SupabaseClient | null {
+  supabase ??= createPublicSupabase(supabaseConfig);
+  supabase?.auth.startAutoRefresh();
+  return supabase;
+}
