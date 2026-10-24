@@ -1,8 +1,8 @@
 # Deferred validation
 
 This repository was written under **Dirty Mode**: source only. Nothing in it has been installed, type-checked, linted,
-tested, built or run. The only check performed was a syntax-only TypeScript parse (`tools/tsparse.cjs` in the outer
-planning shell, VS Code's bundled TypeScript, no type resolution). Every item below must be done, in order, before any
+tested, built or run. Checks were limited to focused source inspection, independent static review and syntax-only TypeScript parsing
+(`tools/tsparse.cjs` in the optional outer planning shell, VS Code's bundled TypeScript, no type resolution). Every item below must be done, in order, before any
 result from this code is trusted. Seeded in M1; each later milestone appends its rows.
 
 | # | Item | Why deferred | Exact command / steps |
@@ -130,3 +130,20 @@ application, worker, test, provider, network or database was executed. The style
 M5 adds `prepareBrowserDesign` in `core/report` so target-aware dev tuning remains behind the report boundary while the worker receives only
 parameters/contexts and a cap predicate. Frozen persisted reconstruction remains the M4 path. The browser public singleton now starts null and is
 activated only on an explicit persisted selection; CLI constructors are unchanged. Bound-aware K selection is source logic, not measured activation.
+
+
+## M6 — final source documentation and activation boundary
+
+README, limitations, NOTICE, inner instructions and BOLT-HANDOFF describe implemented source and pending validation. No output table or named
+failure was generated for documentation. The earlier M1 row19 is historical: all three entrypoint sources now exist, but none has executed.
+
+| # | Item | Why deferred | Exact command / steps |
+|---|---|---|---|
+| 68 | Executable dated preregistration and final frozen schema | Template intentionally undated; no live evidence/run exists | After installation run `npm test -- tests/prereg/schema.test.ts tests/client/frozen-resume.test.ts tests/backend/pipeline.test.ts`; confirm missing/future/equal-to-start dates, changed hashes/models/config, missing candidateCounts and post-approval replacement all reject. On isolated provisioned DB execute the direct authenticated boundary scenarios in row56 before trusting held-out integrity |
+| 69 | Portable imported app and final auth settings | No import/account/hosting permitted during construction | In a separately authorized phase use BOLT-HANDOFF's inspection-only prompt first; verify intended root/revision and actual baseline. Configure public env and server secrets through their proper settings, email confirmation/delivery, Site URL/redirect allowlist and a reset-completion destination. Request-only recovery source does not supply a password-change form |
+| 70 | Generated fixture and README measurement table | No generator/evaluation executed; source only | Follow rows6–8/30, review and commit only synthetic generated fixtures if appropriate. Keep README 'not yet measured' until the authorized frozen live run actually produces a table. Embed numbers from generated results/results.md/results.jsonl/config.json with original identity/provenance; never type an accuracy/cost/failure result by hand |
+| 71 | Failure-list publication decision D4 | No owner-reviewed real cases or generated synthetic excerpt | After the exact run, compare Results demoted titles with matching local Inspector, review at most20 cases, retain private original provenance. Default docs excerpt synthetic only; publish any real examples only on the owner's explicit decision. No current excerpt or executed trap pass is claimed |
+| 72 | Final activation/security/visual acceptance | Static construction does not establish runtime readiness | Complete the pending install/type/lint/test/build/Deno/SQL/auth/isolation/caps/leases/providers/worker/browser/CLI scenarios above in an authorized isolated target, record actual receipts and failures, then decide on release/publication separately. Closing Dirty Mode or importing source alone is not a successful measurement/deployment |
+
+Open nonblocking construction decisions: D1 exact verified generative pin, D2 approved budgets, D3 final allowed origin, D4 real examples.
+No credentials, installs, paid calls, cloud resources, publication or validation execution were part of this source construction run.
