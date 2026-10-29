@@ -1,0 +1,21 @@
+Recommender Offline Eval with an LLM Reranker
+Copyright (c) 2026 Roy Harden. Original product source is distributed under LICENSE (MIT).
+
+This implementation is handwritten TypeScript/SQL. No prior-art repository or cookbook source was copied.
+Generated _vendor files are copies of this repository's own canonical source, with a provenance header
+and the documented zod import rewrite. Runtime dependencies retain their respective licenses.
+
+Evaluation design references (ideas and attribution, not runtime or performance evidence):
+- F. Maxwell Harper and Joseph A. Konstan (2015), The MovieLens Datasets: History and Context.
+  https://doi.org/10.1145/2827872
+- GroupLens MovieLens 100K: https://grouplens.org/datasets/movielens/100k/
+  Raw data is not included. Review its terms before use or redistribution.
+- RUCAIBox/LLMRank: candidate-order/history-order and popularity-bias evaluation motivation.
+- sisinflab/Recommender-ChatGPT, Elliot and LensKit: offline-evaluation/baseline design references.
+- TypeSafe rerank_typesafe cookbook: independent per-candidate Noul pattern, not proof of movie-taste quality.
+  https://docs.typesafe.ai/cookbooks/rerank_typesafe
+- infobip/crs-performance and sisinflab/LLM-MemoryInspector: repeatability and memorisation caveats.
+
+No code was taken from repositories lacking a clear suitable license (including LLMForReRanking,
+LLM4RS and LlamaRec); RecBole was treated as reading material only. No prior-art reported gain is a
+measurement of this repository. All model/protocol/price references require activation-time verification.

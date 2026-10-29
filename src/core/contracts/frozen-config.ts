@@ -1,0 +1,43 @@
+// Complete frozen experiment contract shared with the live function. SQL approval mirrors these supported values.
+import { z } from 'zod';
+
+const hash = z.string().regex(/^[0-9a-f]{64}$/);
+const quarter = z.number().min(0).max(1).refine((n) => Number.isInteger(n * 4), 'weight must be on the 0.25 grid');
+const weights = z.object({ knn: quarter, recency: quarter, genre: quarter }).strict()
+  .refine((w) => w.knn + w.recency + w.genre === 1, 'weights must sum to 1');
+const pin = z.object({ provider: z.string().min(1), model: z.string().min(1) }).strict();
+export const FrozenConfigSchema = z.object({
+  schemaVersion: z.literal(1), seed: z.number().int(), knnK: z.union([z.literal(20), z.literal(50), z.literal(100), z.literal('all')]),
+  K: z.union([z.literal(20), z.literal(30)]), tunedWeights: weights,
+  llmListPromptVersion: z.enum(['llm-list.v1', 'llm-list.v2']), jevPromptVersion: z.literal('jev-point.v1'),
+  primaryArm: z.enum(['llm-list', 'jev-point']), bootstrapResamples: z.literal(10000), practicalMarginNdcg: z.literal(0.01),
+  probeSampleSeed: z.number().int(), probeSampleMax: z.literal(150),
+  models: z.object({ 'llm-list': pin, 'jev-point': pin }).strict(),
+  /** Mock behavior changes the experiment and participates in configHash. Live uses null. */
+  mock: z.object({ preset: z.enum(['unbiased', 'planted-bias']), seed: z.number().int(),
+    forcedModesHash: hash }).strict().nullable(),
+}).strict();
+export type FrozenConfig = z.infer<typeof FrozenConfigSchema>;
+
+export function frozenModeError(config: FrozenConfig, mode: 'mock' | 'live'): string | null {
+  if (mode === 'mock') {
+    if (!config.mock || config.mock.seed !== config.seed ||
+      Object.values(config.models).some((p) => p.provider !== 'mock' || p.model !== 'mock-1'))
+      return 'mock run must freeze mock behavior and model pins';
+  } else if (config.mock !== null || config.models['llm-list'].provider !== 'anthropic' ||
+    config.models['llm-list'].model !== 'claude-haiku-5-5' || config.models['jev-point'].provider !== 'typesafe' ||
+    config.models['jev-point'].model !== 'jev-1.13.0') return 'live provider/model pins mismatch';
+  return null;
+}
+
+// Owner-derived at freeze, approved immutably; the server does not claim to recompute the dataset.
+export const CandidateCountsSchema = z.array(z.object({
+  userKey: z.string().regex(/^[0-9a-f]{16}$/), kEff: z.number().int().min(0).max(30),
+}).strict()).min(1).max(100000);
+export type CandidateCounts = z.infer<typeof CandidateCountsSchema>;
+export function candidateScheduleError(counts: CandidateCounts, users: readonly string[], K: number): string | null {
+  const expected = new Set(users); const counted = new Set(counts.map((c) => c.userKey));
+  if (counted.size !== counts.length || counted.size !== expected.size ||
+    counts.some((c) => !expected.has(c.userKey) || c.kEff > K)) return 'invalid frozen candidate counts';
+  return null;
+}

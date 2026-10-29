@@ -1,0 +1,12 @@
+// Prompt and template hashes. Vendorable: imports only util/.
+//   promptHash   = sha256(canonical JSON of the rendered prompt: text + sampling params, no model, no ids)
+//   templateHash = sha256(canonical JSON of a prompt template), recorded in the frozen config / prereg.
+import { hashCanonical } from '../util/hash.ts';
+
+export function promptHash(rendered: unknown): string {
+  return hashCanonical(rendered);
+}
+
+export function templateHash(template: unknown): string {
+  return hashCanonical(template);
+}

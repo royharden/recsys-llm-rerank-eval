@@ -6,3 +6,17 @@ config/manifest.lock.json
 .recsys-session.json
 node_modules
 dist
+
+# Local credentials and generated artifacts
+.creds/
+ArchiveManager-creds.txt
+*.pem
+*.key
+*.p12
+*.pfx
+*.zip
+*.7z
+*.tar.gz
+.cache/
+.venv/
+coverage/

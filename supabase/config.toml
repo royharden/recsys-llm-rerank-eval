@@ -1,0 +1,4 @@
+project_id = "recsys-llm-rerank-eval"
+
+[functions.rerank]
+verify_jwt = true

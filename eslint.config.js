@@ -38,6 +38,12 @@ export default tseslint.config(
     },
   },
   {
+    files: ['src/core/{arms,prompts,providers,probes}/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [{ regex: 'split/(scorer|temporal)(\\.ts)?$', message: 'Target-bearing SplitResult and Scorer must stop at the split/metrics/report boundary.' }] }],
+    },
+  },
+  {
     files: ['supabase/functions/**/*.ts'],
     languageOptions: { globals: { Deno: 'readonly' } },
   },

@@ -1,0 +1,174 @@
+// rerankguard (PLAN §4 [CX]): turn whatever a model returned into a permutation of the kEff candidate ids.
+// Vendorable: imports only prompts/ and contracts/. Runs once per path: in the function for live, locally for mock.
+//
+// llm-list:
+//   no reply / blank                      → kNN order, formatFailure, failure 'no_reply'
+//   no parseable JSON object anywhere     → kNN order, formatFailure, 'not_json'
+//   first JSON object lacks ranking array → kNN order, formatFailure, 'wrong_type'
+//   ranking = []                          → kNN order, emptyRanking = 1, formatFailure, 'empty_ranking'
+//   otherwise: keep known labels in order (trimmed, case-insensitive), drop unknown (unknown++, non-strings included),
+//   drop repeats (repeat++), append missing in knnRank order (missing++). No formatFailure.
+// jev-point: every c_<pos> must be a finite number in [0, 1]; otherwise the whole list falls back to kNN order
+// (formatFailure). Sort by probability desc, ties → knnRank asc. Extra keys are ignored.
+// Format failures stay in the denominators (the caller keeps the user).
+import type { FailureReason } from '../contracts/rerank-response.ts';
+import { knnOrder, type LabeledCandidate } from '../prompts/labels.ts';
+
+/** Longest model reply the extractor will scan (the output cap is ~200 tokens; this only bounds work). */
+export const MAX_REPLY_CHARS = 100_000;
+/** Longest ranking array processed; entries beyond it count as unknown. */
+export const MAX_RANKING_ENTRIES = 1_000;
+export const MAX_RAW_LABELS = 64;
+
+export interface GuardRepairs {
+  unknown: number;
+  repeat: number;
+  missing: number;
+  emptyRanking: number;
+}
+
+export interface GuardResult {
+  /** Permutation of the candidate item ids. */
+  order: number[];
+  /** Label order of `order`. */
+  labelOrder: string[];
+  /** String entries as the model returned them (≤ 16 chars each, ≤ 64), or null when no ranking array was found. */
+  rawLabels: string[] | null;
+  repairs: GuardRepairs;
+  formatFailure: boolean;
+  failure: FailureReason | null;
+}
+
+type Candidates = readonly LabeledCandidate[];
+
+function zero(): GuardRepairs {
+  return { unknown: 0, repeat: 0, missing: 0, emptyRanking: 0 };
+}
+
+function labelsOf(order: readonly number[], candidates: Candidates): string[] {
+  const byId = new Map(candidates.map((c): [number, string] => [c.itemId, c.label]));
+  return order.map((id) => byId.get(id) ?? '?');
+}
+
+function fallback(candidates: Candidates, failure: FailureReason, rawLabels: string[] | null, emptyRanking = 0): GuardResult {
+  const order = knnOrder(candidates);
+  return { order, labelOrder: labelsOf(order, candidates), rawLabels, repairs: { ...zero(), emptyRanking }, formatFailure: true, failure };
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * The first balanced `{…}` span (string-aware) that parses as a JSON object. Prose and code fences around it are
+ * tolerated; a span that does not parse is skipped and the search continues at the next '{'.
+ */
+export function extractFirstJsonObject(text: string): { ok: true; value: Record<string, unknown> } | { ok: false } {
+  const s = text.length > MAX_REPLY_CHARS ? text.slice(0, MAX_REPLY_CHARS) : text;
+  for (let start = s.indexOf('{'); start !== -1; start = s.indexOf('{', start + 1)) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let j = start; j < s.length; j++) {
+      const ch = s[j];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') inString = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          try {
+            const v: unknown = JSON.parse(s.slice(start, j + 1));
+            if (isPlainObject(v)) return { ok: true, value: v };
+          } catch {
+            // not JSON: try the next '{'
+          }
+          break;
+        }
+      }
+    }
+  }
+  return { ok: false };
+}
+
+export function guardLlmList(raw: string | null | undefined, candidates: Candidates): GuardResult {
+  if (candidates.length === 0) throw new Error('guardLlmList: no candidates');
+  if (raw === null || raw === undefined || raw.trim() === '') return fallback(candidates, 'no_reply', null);
+  const obj = extractFirstJsonObject(raw);
+  if (!obj.ok) return fallback(candidates, 'not_json', null);
+  const ranking = obj.value.ranking;
+  if (!Array.isArray(ranking)) return fallback(candidates, 'wrong_type', null);
+  const rawLabels = ranking
+    .slice(0, MAX_RAW_LABELS)
+    .map((x) => (typeof x === 'string' ? x.slice(0, 16) : String(x).slice(0, 16)));
+  if (ranking.length === 0) return fallback(candidates, 'empty_ranking', rawLabels, 1);
+
+  const byLabel = new Map(candidates.map((c): [string, LabeledCandidate] => [c.label, c]));
+  const repairs = zero();
+  const seen = new Set<string>();
+  const kept: LabeledCandidate[] = [];
+  ranking.forEach((entry, i) => {
+    if (i >= MAX_RANKING_ENTRIES || typeof entry !== 'string') {
+      repairs.unknown++;
+      return;
+    }
+    const c = byLabel.get(entry.trim().toUpperCase());
+    if (!c) repairs.unknown++;
+    else if (seen.has(c.label)) repairs.repeat++;
+    else {
+      seen.add(c.label);
+      kept.push(c);
+    }
+  });
+  const missing = candidates.filter((c) => !seen.has(c.label)).sort((a, b) => a.knnRank - b.knnRank);
+  repairs.missing = missing.length;
+  const full = [...kept, ...missing];
+  return {
+    order: full.map((c) => c.itemId),
+    labelOrder: full.map((c) => c.label),
+    rawLabels,
+    repairs,
+    formatFailure: false,
+    failure: null,
+  };
+}
+
+export interface JevGuardResult {
+  order: number[];
+  /** c_<pos> → probability, only when every answer was valid. */
+  probabilities: Record<string, number> | null;
+  repairs: GuardRepairs;
+  formatFailure: boolean;
+  failure: FailureReason | null;
+}
+
+export function validateJevAnswers(answers: unknown, candidates: Candidates): JevGuardResult {
+  if (candidates.length === 0) throw new Error('validateJevAnswers: no candidates');
+  const fail = (failure: FailureReason): JevGuardResult => ({
+    order: knnOrder(candidates),
+    probabilities: null,
+    repairs: zero(),
+    formatFailure: true,
+    failure,
+  });
+  if (answers === null || answers === undefined) return fail('no_reply');
+  if (!isPlainObject(answers)) return fail('wrong_type');
+  const probabilities: Record<string, number> = {};
+  for (const c of candidates) {
+    if (!Object.prototype.hasOwnProperty.call(answers, c.jevKey)) return fail('missing_answer');
+    const v = answers[c.jevKey];
+    if (typeof v !== 'number') return fail(v === null || v === undefined ? 'missing_answer' : 'wrong_type');
+    if (!Number.isFinite(v)) return fail('non_finite');
+    if (v < 0 || v > 1) return fail('out_of_range');
+    probabilities[c.jevKey] = v;
+  }
+  const order = [...candidates]
+    .sort((a, b) => probabilities[b.jevKey] - probabilities[a.jevKey] || a.knnRank - b.knnRank)
+    .map((c) => c.itemId);
+  return { order, probabilities, repairs: zero(), formatFailure: false, failure: null };
+}

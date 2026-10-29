@@ -1,0 +1,80 @@
+// Request, mapping and cache keys (PLAN §4 [C, X adds repeat separation]). Vendorable: imports only util/.
+//
+//   requestKey  = sha256(runId|arm|variant|repeatIndex|userKey|configHash)
+//   mappingHash = sha256(datasetHash|C|<pos>,<itemId>,<knnRank>...|H|<pos>,<itemId>...)   (presentation positions, 1-based)
+//   cacheKey    = sha256(provider|model|promptVersion|promptHash|canonicalJson(params)|repeatIndex|mappingHash)
+//
+// mappingHash binds the label → item id map to the prompt: two prompts with byte-identical text but different item ids
+// behind a label (e.g. duplicate metadata, different id) get different cache keys. repeatIndex is in the cacheKey, so the
+// repeat probe (repeatIndex = 1) never hits the base call's (repeatIndex = 0) cache entry.
+import { canonicalJson, type JsonValue } from '../util/canonical-json.ts';
+import { hashParts } from '../util/hash.ts';
+
+function noPipe(name: string, v: string): string {
+  if (v.includes('|')) throw new Error(`keys: ${name} must not contain '|'`);
+  return v;
+}
+
+export interface RequestKeyInput {
+  runId: string;
+  arm: string;
+  variant: string;
+  repeatIndex: number;
+  userKey: string;
+  configHash: string;
+}
+
+export function requestKey(k: RequestKeyInput): string {
+  if (!Number.isInteger(k.repeatIndex) || k.repeatIndex < 0) throw new Error(`requestKey: bad repeatIndex ${k.repeatIndex}`);
+  return hashParts([
+    noPipe('runId', k.runId),
+    noPipe('arm', k.arm),
+    noPipe('variant', k.variant),
+    k.repeatIndex,
+    noPipe('userKey', k.userKey),
+    noPipe('configHash', k.configHash),
+  ]);
+}
+
+export interface MappingInput {
+  datasetHash: string;
+  /** Presentation order. */
+  candidates: readonly { itemId: number; knnRank: number }[];
+  /** Presentation order. */
+  history: readonly { itemId: number }[];
+}
+
+export function mappingHash(m: MappingInput): string {
+  return hashParts([
+    noPipe('datasetHash', m.datasetHash),
+    'C',
+    ...m.candidates.map((c, i) => `${i + 1},${c.itemId},${c.knnRank}`),
+    'H',
+    ...m.history.map((h, i) => `${i + 1},${h.itemId}`),
+  ]);
+}
+
+export interface CacheKeyInput {
+  provider: string;
+  model: string;
+  promptVersion: string;
+  /** Hash of the rendered prompt (prompts/hash.ts). */
+  promptHash: string;
+  /** Sampling parameters actually sent (e.g. { temperature: 0, maxTokens: 136 }); serialised canonically. */
+  params: { [key: string]: JsonValue };
+  repeatIndex: number;
+  mappingHash: string;
+}
+
+export function cacheKey(k: CacheKeyInput): string {
+  if (!Number.isInteger(k.repeatIndex) || k.repeatIndex < 0) throw new Error(`cacheKey: bad repeatIndex ${k.repeatIndex}`);
+  return hashParts([
+    noPipe('provider', k.provider),
+    noPipe('model', k.model),
+    noPipe('promptVersion', k.promptVersion),
+    noPipe('promptHash', k.promptHash),
+    noPipe('params', canonicalJson(k.params)),
+    k.repeatIndex,
+    noPipe('mappingHash', k.mappingHash),
+  ]);
+}
